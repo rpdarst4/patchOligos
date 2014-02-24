@@ -199,7 +199,7 @@ class patch_oligos():
             kwargs.get('tries',3),
             kwargs.get('window',0))])
 
-        # check whether same setting shave been used before
+        # check whether same settings have been used before
         for i, in self.curs.execute(
             'SELECT id FROM cfg WHERE enzymes = ? AND length = ? AND TM = ? '
             'AND tries = ? AND window = ?',update):
@@ -220,8 +220,7 @@ def refGene(db='/goldenPath/hg19/database/refGene.txt.gz'):
         host=FTP('hgdownload.cse.ucsc.edu')
         host.login('anonymous',Entrez.email)
         host.retrbinary('RETR '+db,open(path.split(db)[1],'wb').write)
-    with gzip.open(path.split(db)[1],'r') as handle:
-        for row in handle:
-            row=row.split('\t')
-            if GenBankIDs.get(row[2],False):
-                yield row[1],row[2],row[4:6][row[3]=='-'],row[3]
+    for row in gzip.open(path.split(db)[1],'r'):
+        row=row.split('\t')
+        if GenBankIDs.get(row[2],False):
+            yield row[1],row[2],row[4:6][row[3]=='-'],row[3]
