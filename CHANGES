@@ -1,0 +1,23 @@
+4/9/2014	ariva@ufl.edu
+
+- The constructor now takes an optional argument 'org', allowing to
+  specify the organism. Supported values are 'hs' (=hg19), 'mm'
+  (=mm10), 'mm9' (=mm9). The organism name is prefixed to the name of
+  the refGene file and the database filename.
+
+- Added the showSettings() method to display settings in a readable
+  format.
+
+- Added the processFile() function to read multiple gene UIDs from a
+  tab-delimited text file and to write the corresponding output to a
+  file. Optional arguments allow to specify the organism and the
+  column in the input file containing the UIDs (0-based). Example:
+
+  patchOligos.processFile("input.tsv", "output.tsv", org="mm", column=1)
+
+- Added "main" function, so the script can be called from the
+  command-line. This will run the processFile() function with the
+  input and output files as arguments. The organism can be provided as
+  an optional third argument. Example:
+
+  > python patchOligos.py input.tsv output.tsv mm
