@@ -18,15 +18,36 @@
 from Bio import Entrez,Restriction,SeqIO
 from ftplib import FTP
 from os import path
-import gzip,sqlite3
+import gzip,sqlite3,sys
 
 # Entrez requires an email address for downloads
 # replace with your own email address please
 Entrez.email='rdarst@ufl.edu'
 
-# names of hg19 chromosomes
-GenBankIDs={'chr'+str(n): 'CM000{0}.1'.format(n+662) for n in range(1,23)}
-GenBankIDs.update(chrX='CM000685.1',chrY='CM000686.1')
+# Support for multiple organisms (added by A.Riva)
+
+GenBankIDs = {}
+RefGenePaths = {'hs': '/goldenPath/hg19/database/refGene.txt.gz',
+                'mm': '/goldenPath/mm10/database/refGene.txt.gz',
+                'mm9': '/goldenPath/mm9/database/refGene.txt.gz'}
+
+def initGenBankIDs(org="hs"):
+    global GenBankIDs
+
+    if org == "hs":
+        # names of hg19 chromosomes
+        GenBankIDs = {'chr'+str(n): 'CM000{0}.1'.format(n+662) for n in range(1,23)}
+        GenBankIDs.update(chrX='CM000685.1',chrY='CM000686.1')
+    elif org == "mm":
+        # names of mm10 chromosomes
+        GenBankIDs = {'chr'+str(n): 'CM00{0}.2'.format(n+993) for n in range(1,19)}
+        GenBankIDs.update(chrX='CM001013.2',chrY='CM001014.2')
+    elif org == "mm9":
+        # names of mm9 chromosomes
+        GenBankIDs = {'chr'+str(n): 'CM00{0}.1'.format(n+993) for n in range(1,19)}
+        GenBankIDs.update(chrX='CM001013.1',chrY='CM001014.1')
+        
+        
 
 ##############################################################################
 ##############################################################################
@@ -46,10 +67,16 @@ def MT(seq):
 # so patch oligos need not be re-calculated each time
 class patch_oligos():
 
+    organism = "hs"             # Keep track of which organism we're working with
+    deferCommit = False;        # To speed up parsing of refseq table
+
     ##########################################################################
 
     # to create SQL database
-    def __init__(self,db='patchOligos.db',TSSs=True):
+    def __init__(self,org='hs',db='patchOligos.db',TSSs=True):
+        self.organism = org
+        initGenBankIDs()
+        db = org + "-" + db
         self.conn=sqlite3.connect(db)
         self.curs=self.conn.cursor()
         for command in (
@@ -78,7 +105,9 @@ class patch_oligos():
         # optional, but needed for lookup by RefSeq UID
         self.curs.execute('SELECT COUNT(*) FROM gene')
         if self.curs.fetchone()[0]==0 and TSSs:
-            for TSS in refGene(): self.add_locus(*TSS)
+            self.deferCommit = True
+            for TSS in refGene(org): self.add_locus(*TSS)
+            self.deferCommit = False
         self.conn.commit()
 
     ##########################################################################
@@ -102,6 +131,7 @@ class patch_oligos():
             x,y,z,versions=str(x),int(y),str(z),versions.split(',')
 
             # if oligos have not been chosen with current settings
+            # print("N={}, versions={}".format(N, versions))
             if str(N) not in versions:
                 if self.pick_oligos(i,x,y,z):
                     self.curs.execute(
@@ -131,7 +161,8 @@ class patch_oligos():
                               (chrom,bp,strand,'0'))
             i=self.curs.lastrowid
         self.curs.execute('INSERT INTO gene VALUES (NULL, ?, ?)',(i,UID))
-        self.conn.commit()
+        if not self.deferCommit:
+            self.conn.commit()
 
     ##########################################################################
 
@@ -139,6 +170,7 @@ class patch_oligos():
     # i = a row ID in table "loci"; x,y,z = chromosome, basepair, strand
     def pick_oligos(self,i,x,y,z):
 
+        # print("picking oligos for {}...".format(i))
         # read settings
         self.curs.execute(
             'SELECT * FROM cfg WHERE id = ?',(self.__settings__,))
@@ -152,6 +184,7 @@ class patch_oligos():
                 'nucleotide',rettype='fasta',id=GenBankIDs[x],
                 seq_start=y-d,seq_stop=y+d+1),'fasta')
             except: continue
+            # print record
             if n>1: print '{0}:{1}... {2} tries'.format(x,y,n)
             break
         else:
@@ -182,11 +215,20 @@ class patch_oligos():
 
     ##########################################################################
 
-    # to see current settings
+    # to retrieve current settings
     def settings(self):
         self.curs.execute(
             'SELECT * FROM cfg WHERE id = ?',(self.__settings__,))
         return self.curs.fetchone()[1:]
+
+    # to show current settings
+    def showSettings(self):
+        st = self.settings()
+        print("Enzymes: " + st[0])
+        print("Region:  " + st[1])
+        print("TM:      " + st[2])
+        print("Tries:   " + st[3])
+        print("Window:  " + st[4])
 
     ##########################################################################
 
@@ -214,13 +256,43 @@ class patch_oligos():
 ##############################################################################
 ##############################################################################
 
+
+
 # download TSS positions from UCSC (if not already present)
-def refGene(db='/goldenPath/hg19/database/refGene.txt.gz'):
-    if not path.exists(path.split(db)[1]):
-        host=FTP('hgdownload.cse.ucsc.edu')
-        host.login('anonymous',Entrez.email)
-        host.retrbinary('RETR '+db,open(path.split(db)[1],'wb').write)
-    for row in gzip.open(path.split(db)[1],'r'):
-        row=row.split('\t')
+def refGene(org='hs'):
+    db = RefGenePaths[org]
+    remoteName = path.split(db)[1]
+    localPath = org + "-" + remoteName
+    if not path.exists(localPath):
+        print("Downloading {} to {}...".format(db, localPath))
+        host = FTP('hgdownload.cse.ucsc.edu')
+        host.login('anonymous', Entrez.email)
+        host.retrbinary('RETR ' + db, open(localPath, 'wb').write)
+    print("Parsing {}...".format(localPath))
+    for row in gzip.open(localPath,'r'):
+        row = row.split('\t')
         if GenBankIDs.get(row[2],False):
             yield row[1],row[2],row[4:6][row[3]=='-'],row[3]
+
+##############################################################################
+# Following functions added by A.Riva 
+##############################################################################
+
+def processFile(infile, outfile, column=0, org='hs'):
+    DB = patch_oligos(org)
+    with open(outfile,'w') as handle:
+        handle.write('UID\tchromosome\tbasepair\tstrand\tA\tB\tsequence\n')
+        for line in open(infile,'r'):
+            gene = line.rstrip('\n').split('\t')[column]
+            print("Designing primers for {}...".format(gene))
+            for i in DB[gene]:
+                handle.write('\n'+'\t'.join([str(j) for j in i]))
+
+# Main function (calls processFile)
+if __name__ == "__main__":
+    # TODO: option processing for column and org
+    if len(sys.argv) == 4:
+        org = sys.argv[3]
+    else:
+        org = "hs"
+    processFile(sys.argv[1], sys.argv[2], org=org)
