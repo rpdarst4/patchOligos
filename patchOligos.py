@@ -82,7 +82,7 @@ class patch_oligos():
         for command in (
             '{0} TABLE {1} gene (id {2}, loc, UID)',
             '{0} TABLE {1} loci (id {2}, chrom, bp, strand, versions)',
-            '{0} TABLE {1} olig (id {2}, config, loc, x, y, A, B, seq)',
+            '{0} TABLE {1} olig (id {2}, config, loc, x, y, A, B, seq, MTA, MTB)',
             '{0} TABLE {1} cfg  (id {2}, enzymes, length, TM, tries, window)',
             '{0} INDEX {1} gene_by_loc ON gene (loc)',
             '{0} INDEX {1} gene_by_UID ON gene (UID)',
@@ -99,7 +99,7 @@ class patch_oligos():
                 'INSERT INTO cfg VALUES (NULL, ?, ?, ?, ?, ?)',tuple([
                     str(arg) for arg in (['AluI'],(200,400),62,3,0)]))
             self.__settings__=1
-        print self.settings()
+        # print self.settings()
 
         # on file creation, get all TSS positions;
         # optional, but needed for lookup by RefSeq UID
@@ -140,14 +140,15 @@ class patch_oligos():
                 self.conn.commit()
 
             # yield each option (can there be more than one?)
-            for a,b,A,B,seq in self.curs.execute(
-                'SELECT x, y, A, B, seq FROM olig '
+            for a,b,A,B,seq,MTA,MTB in self.curs.execute(
+                'SELECT x, y, A, B, seq, MTA, MTB FROM olig '
                 'WHERE loc = ? AND config = ?',(i,N,)):
                 
                     # A, B = adaptor oligo sequences,
                     # a, b = relative positions of A and B adaptors,
                     # seq = reference sequence between adaptors
-                    yield UID,x,y,z,a,b,A,B,seq
+                    # MTA, MTB = A and B melting temperatures
+                    yield UID,x,y,z,a,b,A,B,seq,MTA,MTB
 
     ##########################################################################
 
@@ -201,24 +202,35 @@ class patch_oligos():
             if not length[0]<=b-a<=length[1]: continue
             if a-window>d or b+window<d: continue
             A=B=None
+            MTA=MTB=0
             for j in range(b-a):
                 if not A: A=str(record.seq[a:a+j].reverse_complement())
                 if not B: B=str(record.seq[b-j:b].reverse_complement())
-                if MT(A)<TM: A=None
-                if MT(B)<TM: B=None
+                MTA = MT(A)
+                MTB = MT(B)
+                if MT(A)<TM: 
+                    A=None
+                    MTA=0
+                if MT(B)<TM: 
+                    B=None
+                    MTB=0
             if (A and B): self.curs.execute(
-                'INSERT INTO olig VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)',
-                (self.__settings__,i,a-d,b-d,A+'-adaptor','adaptor-'+B,
-                 str(record.seq[a:b+1])))
+                    'INSERT INTO olig VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    (self.__settings__,i,a-d,b-d,A+'-adaptor','adaptor-'+B, str(record.seq[a:b+1]), MTA, MTB))
         self.conn.commit()
         return True
 
     ##########################################################################
 
     # to retrieve current settings
-    def settings(self):
+    # if the first argument is specified, select the corresponding settings
+    def settings(self, idx=False):
+        if idx:
+            self.__settings__=idx
+        else:
+            idx=self.__settings__
         self.curs.execute(
-            'SELECT * FROM cfg WHERE id = ?',(self.__settings__,))
+            'SELECT * FROM cfg WHERE id = ?',(idx,))
         return self.curs.fetchone()[1:]
 
     # to show current settings
@@ -229,6 +241,11 @@ class patch_oligos():
         print("TM:      " + st[2])
         print("Tries:   " + st[3])
         print("Window:  " + st[4])
+
+    # to list all saved settings
+    def listSettings(self):
+        for row in self.curs.execute("SELECT * FROM cfg ORDER BY id"):
+            print row
 
     ##########################################################################
 
@@ -278,10 +295,11 @@ def refGene(org='hs'):
 # Following functions added by A.Riva 
 ##############################################################################
 
-def processFile(infile, outfile, column=0, org='hs'):
+def processFile(infile, outfile, column=0, org='hs', cfg=False):
     DB = patch_oligos(org)
+    DB.settings(idx=cfg)
     with open(outfile,'w') as handle:
-        handle.write('UID\tchromosome\tbasepair\tstrand\tA\tB\tsequence\n')
+        handle.write('UID\tchromosome\tbasepair\tstrand\tA\tB\tsequence\tMT(A)\tMT(B)\n')
         for line in open(infile,'r'):
             gene = line.rstrip('\n').split('\t')[column]
             print("Designing primers for {}...".format(gene))
@@ -290,9 +308,39 @@ def processFile(infile, outfile, column=0, org='hs'):
 
 # Main function (calls processFile)
 if __name__ == "__main__":
-    # TODO: option processing for column and org
-    if len(sys.argv) == 4:
-        org = sys.argv[3]
+
+    org = "hs"
+    column = 0
+    sidx = False                # Use default settings
+    infile = False
+    outfile = False
+
+    # Parse command-line arguments
+    next = False
+    for arg in sys.argv[1:]:
+        if arg == "-o": next = "o"
+        elif arg == "-c": next = "c"
+        elif arg == "-s": next = "s"
+        else:
+            if next == "o": org = arg
+            elif next == "c": column = int(arg)
+            elif next == "s": sidx = int(arg)
+            elif infile == False:
+                infile = arg
+            else:
+                outfile = arg
+            next = False
+
+    if infile and outfile:
+        processFile(sys.argv[1], sys.argv[2], org=org, column=column, cfg=sidx)
     else:
-        org = "hs"
-    processFile(sys.argv[1], sys.argv[2], org=org)
+        DB = patch_oligos(org)
+        print """
+usage: patchOligos.py [-o org] [-c col] [-s cfg] infile outfile
+  org    = organism (currently one of hs, mm, mm9)
+  column = column in infile containing gene IDs
+  cfg    = index of configuration to use
+
+Existing configurations for {} (last one is used by default):
+""".format(org)
+        DB.listSettings()

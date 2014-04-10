@@ -1,3 +1,20 @@
+4/10/2014	ariva@ufl.edu
+
+- The listSettings() method shows all existing configurations. 
+
+- The settings() method now takes an optional argument idx, to set the
+  current configuration to the specified one. Example:
+
+  >>> DB.update(TM=40)   # Create a new configuration with a different TM
+  >>> DB.listSettings()
+  (1, u"['AluI']", u'(200, 400)', u'62', u'3', u'0')
+  (2, u"['AluI']", u'(200, 400)', u'40', u'3', u'0')
+  >>> DB.settings()
+  (u"['AluI']", u'(200, 400)', u'40', u'3', u'0') # New configuration is default
+  >>> DB.settings(1)  # Go back to configuration 1
+  >>> DB.settings()
+  (u"['AluI']", u'(200, 400)', u'62', u'3', u'0')
+
 4/9/2014	ariva@ufl.edu
 
 - The constructor now takes an optional argument 'org', allowing to
