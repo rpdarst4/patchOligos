@@ -15,6 +15,13 @@
   >>> DB.settings()
   (u"['AluI']", u'(200, 400)', u'62', u'3', u'0')
 
+- Added processing of command-line options. Please execute:
+
+  > python patchOligos.py
+
+  for details.
+
+
 4/9/2014	ariva@ufl.edu
 
 - The constructor now takes an optional argument 'org', allowing to
