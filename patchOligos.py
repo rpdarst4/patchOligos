@@ -75,7 +75,7 @@ class patch_oligos():
     # to create SQL database
     def __init__(self,org='hs',db='patchOligos.db',TSSs=True):
         self.organism = org
-        initGenBankIDs()
+        initGenBankIDs(org=org)
         db = org + "-" + db
         self.conn=sqlite3.connect(db)
         self.curs=self.conn.cursor()
