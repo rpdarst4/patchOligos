@@ -40,11 +40,11 @@ def initGenBankIDs(org="hs"):
         GenBankIDs.update(chrX='CM000685.1',chrY='CM000686.1')
     elif org == "mm":
         # names of mm10 chromosomes
-        GenBankIDs = {'chr'+str(n): 'CM00{0}.2'.format(n+993) for n in range(1,19)}
+        GenBankIDs = {'chr'+str(n): 'CM00{0}.2'.format(n+993) for n in range(1,20)}
         GenBankIDs.update(chrX='CM001013.2',chrY='CM001014.2')
     elif org == "mm9":
         # names of mm9 chromosomes
-        GenBankIDs = {'chr'+str(n): 'CM00{0}.1'.format(n+993) for n in range(1,19)}
+        GenBankIDs = {'chr'+str(n): 'CM00{0}.1'.format(n+993) for n in range(1,20)}
         GenBankIDs.update(chrX='CM001013.1',chrY='CM001014.1')
         
         
