@@ -299,10 +299,10 @@ def processFile(infile, outfile, column=0, org='hs', cfg=False):
     DB = patch_oligos(org)
     DB.settings(idx=cfg)
     with open(outfile,'w') as handle:
-        handle.write('UID\tchromosome\tbasepair\tstrand\tA\tB\tsequence\tMT(A)\tMT(B)\n')
+        handle.write('UID\tchromosome\tbasepair\tstrand\tA\tB\tsequence\tMT(A)\tMT(B)')
         for line in open(infile,'r'):
-            gene = line.rstrip('\n').split('\t')[column]
-            print("Designing primers for {}...".format(gene))
+            gene = line.rstrip('\n\r').split('\t')[column]
+            print("Designing primers for {}".format(gene))
             for i in DB[gene]:
                 handle.write('\n'+'\t'.join([str(j) for j in i]))
 
@@ -332,7 +332,7 @@ if __name__ == "__main__":
             next = False
 
     if infile and outfile:
-        processFile(sys.argv[1], sys.argv[2], org=org, column=column, cfg=sidx)
+        processFile(infile, outfile, org=org, column=column, cfg=sidx)
     else:
         DB = patch_oligos(org)
         print """
